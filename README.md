@@ -1,2 +1,3 @@
-# PS-Multi-Tools-Actions-Public
-The public mirror of PS Multi Tools Actions without user changes.
+# PS Multi Tools Actions
+
+This repository contains the build actions used by PS Multi Tools.

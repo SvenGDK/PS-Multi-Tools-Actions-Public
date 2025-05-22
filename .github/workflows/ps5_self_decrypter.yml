@@ -1,0 +1,73 @@
+name: Build PS5-SELF-Decrypter
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  attestations: write
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Checkout
+      - name: Checkout SDK
+        uses: actions/checkout@v3
+        with:
+          repository: ps5-payload-dev/sdk
+          path: sdk
+
+      # 2. Restore existing SDK from cache using a stable key if exists
+      - name: Cache PS5 Payload SDK (Stable Key)
+        id: cache-sdk
+        uses: actions/cache@v3
+        with:
+          path: ${{ runner.tool_cache }}/ps5-payload-sdk
+          key: sdk-${{ runner.os }}-v1
+          restore-keys: sdk-${{ runner.os }}-
+
+      # 3. Setup the SDK
+      - name: Setup SDK
+        working-directory: sdk
+        run: |
+          sudo apt update
+          sudo apt install -y xxd clang-15 lld-15
+          if [ ! -d "${{ runner.tool_cache }}/ps5-payload-sdk" ]; then
+            echo "SDK not found in cache. Building SDK..."
+            make DESTDIR=${{ runner.tool_cache }}/ps5-payload-sdk clean install
+          else
+            echo "SDK found in cache, skipping build."
+          fi
+          echo "PS5_PAYLOAD_SDK=${{ runner.tool_cache }}/ps5-payload-sdk" >> $GITHUB_ENV
+        shell: bash
+
+      # 4. Checkout
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # 5. Build the PS5-SELF-Decrypter payload
+      - name: Build
+        working-directory: PS5-SELF-Decrypter
+        run: |
+         rm -f ./PS5-SELF-Decrypter/bin/ps5-self-decrypter.elf
+         rm -f ./bin/ps5-self-decrypter.elf
+         make clean
+         make -j$(nproc)
+        shell: bash
+        
+      # 6. Attest the build provenance
+      - name: Attest
+        uses: actions/attest-build-provenance@v1
+        continue-on-error: true  # This will fail if the repository is private
+        with: 
+          subject-path: ./PS5-SELF-Decrypter/bin/ps5-self-decrypter.elf
+
+      # 7. Upload the final artifact
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ps5-self-decrypter
+          path: ./PS5-SELF-Decrypter/bin/ps5-self-decrypter.elf
+          if-no-files-found: error
